@@ -3,8 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "account-turing": "node src/account-turing.js",
-    "account-mangata": "node src/account-mangata.js"
+    "accounts": "node src/accounts.js"
   },
   "author": "",
   "license": "ISC",

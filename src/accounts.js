@@ -4,18 +4,50 @@ const pgp = require('pg-promise')();
 const moment = require('moment');
 const inquirer = require('inquirer').default;
 
-const getTableName = (currentDate) => `account_${currentDate}_turing`;
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const getTableName = (currentDate) => `account_${currentDate}`;
 
 async function fetchBalances(db) {
+  console.log("Fetching balances...");
   const query = `
     SELECT DISTINCT ON (account_id) account_id, total_balance
       FROM turing.account_snapshots
       WHERE total_balance != 0
       ORDER BY account_id, snapshot_at_block DESC;
   `;
-  const result = await db.query(query);
-  return result;
+  const balances = await db.query(query);
+  console.log("Fetched balances: ", balances.length);
+  return balances;
 }
+
+const fetchTokenHoldersOnMangata = async () => {
+  let accounts = [];
+  let page = 0;
+  let maxPage = 1;
+  console.log("Fetching token holders on Mangata...");
+  do {
+    console.log("fetching token holders, page: ", page);
+    const resp = await fetch("https://mangatax.api.subscan.io/api/scan/token/holders", {
+      method: 'POST',
+      headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': 'e0e9a030741440d6bd8e669a57bcf1d3'
+      },
+      body: JSON.stringify({ unique_id: "7", row: 100, page })
+    })
+    const result = await resp.json();
+    const count = result.data.count;
+    maxPage = Math.ceil(count / 100);
+    const addresses = _.map(result.data.list, ({ account_display: { address }, balance }) => ({ address, balance }));
+    accounts = _.concat(accounts, addresses);
+    await delay(1000);
+    page += 1;
+  } while (page < maxPage);
+
+  console.log("Fetched token holders on Mangata, length: ", accounts.length);
+  return accounts;
+};
 
 /**
  * Check if we need to calculate the account table for the given date
@@ -66,22 +98,32 @@ const main = async () => {
 
   // Fetch balances
   const dbSubQL = pgp(process.env.SUBQL_PG_URL);
-  console.log("Fetching balances...");
   const balances = await fetchBalances(dbSubQL);
-  console.log("Fetched balances: ", balances.length);
+
+  // Fetch token holders on Mangata
+  const tokenHoldersOnMangata = await fetchTokenHoldersOnMangata();
 
   // Create a new table
   const tableName = getTableName(currentDate);
   await dbSnapshot.query(`DROP TABLE IF EXISTS ${tableName};`);
-  const createTableQuery = `CREATE TABLE ${tableName} (id SERIAL PRIMARY KEY, account_id TEXT NOT NULL, total_balance NUMERIC NOT NULL);`;
+  const createTableQuery = `CREATE TABLE ${tableName} (id SERIAL PRIMARY KEY, chain TEXT NOT NULL, address TEXT NOT NULL, balance NUMERIC NOT NULL);`;
   console.log(`Creating table by SQL: `, createTableQuery);
   await dbSnapshot.query(createTableQuery);
   console.log(`Created table ${tableName}`);
 
   // Batch insert data
   console.log("Inserting data into table: ", tableName);
-  let insertQuery = `INSERT INTO ${tableName} (account_id, total_balance) VALUES `;
-  insertQuery += _.join(_.map(balances, (row) => `('${row.account_id}', ${row.total_balance})`), ', ');
+  let insertQuery = `INSERT INTO ${tableName} (chain, address, balance) VALUES `;
+  
+  // Insert balances on Turing
+  insertQuery += _.join(_.map(balances, (row) => `('turing', '${row.account_id}', ${row.total_balance})`), ', ');
+
+  // Insert token holders on Mangata
+  if (tokenHoldersOnMangata.length > 0) {
+    insertQuery += ', ';
+    insertQuery += _.join(_.map(tokenHoldersOnMangata, (row) => `('mangata', '${row.address}', ${row.balance})`), ', ');
+  }
+
   await dbSnapshot.query(insertQuery);
   console.log("Inserted data into table: ", tableName);
 };
