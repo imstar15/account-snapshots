@@ -21,7 +21,7 @@ async function fetchBalances(db) {
   return balances;
 }
 
-const fetchTokenHoldersOnMangata = async () => {
+const fetchTokenHoldersOnMangata = async (subscanApiKey) => {
   let accounts = [];
   let page = 0;
   let maxPage = 1;
@@ -32,7 +32,7 @@ const fetchTokenHoldersOnMangata = async () => {
       method: 'POST',
       headers: {
       'Content-Type': 'application/json',
-      'x-api-key': 'e0e9a030741440d6bd8e669a57bcf1d3'
+      'x-api-key': subscanApiKey,
       },
       body: JSON.stringify({ unique_id: "7", row: 100, page })
     })
@@ -88,6 +88,10 @@ const main = async () => {
     throw new Error("ACCOUNT_SNAPSHOTS_PG_URL environment variable is not set");
   }
 
+  if (_.isEmpty(process.env.SUBSCAN_API_KEY)) {
+    throw new Error("SUBSCAN_API_KEY environment variable is not set");
+}
+
   const currentDate = moment().format('MMDD');
   const dbSnapshot = pgp(process.env.ACCOUNT_SNAPSHOTS_PG_URL);
 
@@ -101,7 +105,7 @@ const main = async () => {
   const balances = await fetchBalances(dbSubQL);
 
   // Fetch token holders on Mangata
-  const tokenHoldersOnMangata = await fetchTokenHoldersOnMangata();
+  const tokenHoldersOnMangata = await fetchTokenHoldersOnMangata(process.env.SUBSCAN_API_KEY);
 
   // Create a new table
   const tableName = getTableName(currentDate);
