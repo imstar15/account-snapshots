@@ -71,7 +71,7 @@ const main = async () => {
   console.log("Fetched balances: ", balances.length);
 
   // Create a new table
-  const tableName = `account_${currentDate}_turing`;
+  const tableName = getTableName(currentDate);
   await dbSnapshot.query(`DROP TABLE IF EXISTS ${tableName};`);
   const createTableQuery = `CREATE TABLE ${tableName} (id SERIAL PRIMARY KEY, account_id TEXT NOT NULL, total_balance NUMERIC NOT NULL);`;
   console.log(`Creating table by SQL: `, createTableQuery);
