@@ -77,7 +77,7 @@ const calculateAverage = (balancesAtDates) => {
 
 /**
  * Calculate the average balance of all accounts at the given dates
- * Example: node src/avg.js 0107,0108,0109
+ * Example: yarn run avg 0107,0108,0109
  */
 const main = async() => {
   if (_.isEmpty(process.env.ACCOUNT_SNAPSHOTS_PG_URL)) {
