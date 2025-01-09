@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "accounts": "node src/accounts.js"
+    "accounts": "node src/accounts.js",
+    "avg": "node src/avg.js"
   },
   "author": "",
   "license": "ISC",
