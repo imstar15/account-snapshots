@@ -3,23 +3,39 @@ const _ = require("lodash");
 const pgp = require('pg-promise')();
 const moment = require('moment');
 const inquirer = require('inquirer').default;
+const Decimal = require('decimal.js');
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const getTableName = (currentDate) => `account_${currentDate}`;
 
-async function fetchBalances(db) {
-  console.log("Fetching balances...");
-  const query = `
-    SELECT DISTINCT ON (account_id) account_id, total_balance
-      FROM turing.account_snapshots
-      WHERE total_balance != 0
-      ORDER BY account_id, snapshot_at_block DESC;
-  `;
-  const balances = await db.query(query);
-  console.log("Fetched balances: ", balances.length);
-  return balances;
-}
+const fetchTokenHoldersOnTuring = async (subscanApiKey) => {
+  let accounts = [];
+  let page = 0;
+  let maxPage = 1;
+  console.log("Fetching token holders on Turing...");
+  do {
+    console.log("fetching token holders, page: ", page);
+    const resp = await fetch("https://turing.api.subscan.io/api/v2/scan/accounts", {
+      method: 'POST',
+      headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': subscanApiKey,
+      },
+      body: JSON.stringify({ row: 100, page })
+    })
+    const result = await resp.json();
+    const count = result.data.count;
+    maxPage = Math.ceil(count / 100);
+    const addresses = _.map(result.data.list, ({ address, balance }) => ({ address, balance: new Decimal(balance).times(10000000000).toString() }));
+    accounts = _.concat(accounts, addresses);
+    await delay(1000);
+    page += 1;
+  } while (page < maxPage);
+
+  console.log("Fetched token holders on Turing, length: ", accounts.length);
+  return accounts;
+};
 
 const fetchTokenHoldersOnMangata = async (subscanApiKey) => {
   let accounts = [];
@@ -100,9 +116,8 @@ const main = async () => {
     return;
   }
 
-  // Fetch balances
-  const dbSubQL = pgp(process.env.SUBQL_PG_URL);
-  const balances = await fetchBalances(dbSubQL);
+  // Fetch balances on Turing
+  const tokenHoldersOnTuring = await fetchTokenHoldersOnTuring(process.env.SUBSCAN_API_KEY);
 
   // Fetch token holders on Mangata
   const tokenHoldersOnMangata = await fetchTokenHoldersOnMangata(process.env.SUBSCAN_API_KEY);
@@ -120,7 +135,7 @@ const main = async () => {
   let insertQuery = `INSERT INTO ${tableName} (chain, address, balance) VALUES `;
   
   // Insert balances on Turing
-  insertQuery += _.join(_.map(balances, (row) => `('turing', '${row.account_id}', ${row.total_balance})`), ', ');
+  insertQuery += _.join(_.map(tokenHoldersOnTuring, (row) => `('turing', '${row.address}', ${row.balance})`), ', ');
 
   // Insert token holders on Mangata
   if (tokenHoldersOnMangata.length > 0) {
