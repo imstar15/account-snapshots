@@ -4,7 +4,8 @@
   "description": "",
   "scripts": {
     "accounts": "node src/accounts.js",
-    "avg": "node src/avg.js"
+    "avg": "node src/avg.js",
+    "total": "node src/total.js"
   },
   "author": "",
   "license": "ISC",
