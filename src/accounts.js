@@ -27,7 +27,7 @@ const fetchTokenHoldersOnTuring = async (subscanApiKey) => {
     const result = await resp.json();
     const count = result.data.count;
     maxPage = Math.ceil(count / 100);
-    const addresses = _.map(result.data.list, ({ address, balance }) => ({ address, balance: new Decimal(balance).times(10000000000).toString() }));
+    const addresses = _.map(result.data.list, (data) => ({ address: data.address, balance: new Decimal(data.balance).times(10000000000).toString(), data }));
     accounts = _.concat(accounts, addresses);
     await delay(1000);
     page += 1;
@@ -55,7 +55,7 @@ const fetchTokenHoldersOnMangata = async (subscanApiKey) => {
     const result = await resp.json();
     const count = result.data.count;
     maxPage = Math.ceil(count / 100);
-    const addresses = _.map(result.data.list, ({ account_display: { address }, balance }) => ({ address, balance }));
+    const addresses = _.map(result.data.list, (data) => ({ address: data.account_display.address, balance: data.balance, data }));
     accounts = _.concat(accounts, addresses);
     await delay(1000);
     page += 1;
@@ -125,22 +125,22 @@ const main = async () => {
   // Create a new table
   const tableName = getTableName(currentDate);
   await dbSnapshot.query(`DROP TABLE IF EXISTS ${tableName};`);
-  const createTableQuery = `CREATE TABLE ${tableName} (id SERIAL PRIMARY KEY, chain TEXT NOT NULL, address TEXT NOT NULL, balance NUMERIC NOT NULL);`;
+  const createTableQuery = `CREATE TABLE ${tableName} (id SERIAL PRIMARY KEY, chain TEXT NOT NULL, address TEXT NOT NULL, balance NUMERIC NOT NULL, data JSONB NOT NULL);`;
   console.log(`Creating table by SQL: `, createTableQuery);
   await dbSnapshot.query(createTableQuery);
   console.log(`Created table ${tableName}`);
 
   // Batch insert data
   console.log("Inserting data into table: ", tableName);
-  let insertQuery = `INSERT INTO ${tableName} (chain, address, balance) VALUES `;
+  let insertQuery = `INSERT INTO ${tableName} (chain, address, balance, data) VALUES `;
   
   // Insert balances on Turing
-  insertQuery += _.join(_.map(tokenHoldersOnTuring, (row) => `('turing', '${row.address}', ${row.balance})`), ', ');
+  insertQuery += _.join(_.map(tokenHoldersOnTuring, (row) => `('turing', '${row.address}', ${row.balance}, '${JSON.stringify(row.data).replace(/'/g, "''")}'::jsonb)`), ', ');
 
   // Insert token holders on Mangata
   if (tokenHoldersOnMangata.length > 0) {
     insertQuery += ', ';
-    insertQuery += _.join(_.map(tokenHoldersOnMangata, (row) => `('mangata', '${row.address}', ${row.balance})`), ', ');
+    insertQuery += _.join(_.map(tokenHoldersOnMangata, (row) => `('mangata', '${row.address}', ${row.balance}, '${JSON.stringify(row.data).replace(/'/g, "''")}'::jsonb)`), ', ');
   }
 
   await dbSnapshot.query(insertQuery);
